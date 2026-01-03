@@ -12,8 +12,7 @@ Pipfile.lock
 uv.lock
 
 # Data files
-data/raw/
-data/processed/
+data/
 *.pkl
 *.pt
 *.pth

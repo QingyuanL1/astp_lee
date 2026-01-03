@@ -1,4 +1,0 @@
-id,n_nodes,cost,regrets_computed,regret_mode
-3cf5a8291da34b1e948c4429fb19ab70,20,inf,1,row_best
-7588568a323c4f9f915b9e3bb855dcd9,20,inf,1,row_best
-afd12f4ad2f14d9f83b3c32b2734cf27,20,inf,1,row_best
