@@ -6,29 +6,33 @@ __pycache__/
 
 # Virtual environments / dependency locks
 .venv/
+.venv_wsl/
 .env/
 Pipfile.lock
+uv.lock
 
 # Data files
 data/raw/
 data/processed/
 *.pkl
 *.pt
+*.pth
 *.npy
 *.npz
+saved_dataset/
 
 # Job logs / runtime files
 jobs
 slurm-*.out
 
 # IDE / editor configs
-.vscode
+.vscode/
 .idea/
+.claude/
 
 # Local projects / saved models
 LKH-3.0.9/
 saved_model/
-saved_dataset/
 arch_search_runs/
 runs/
 search/
@@ -37,8 +41,23 @@ search/
 LKH.bat
 lkh_wsl.py
 
-# WSL virtual environment
-.venv_wsl/
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+
+# Extra docs (keep only README.md)
+ENV_SETUP.md
+GPU_RUN.md
+RUN_COMMANDS.md
+
+# Project-specific
+=1.0
+LKH
+pyproject.toml
+result_*.json
 
 # Test files
 test_*.py
