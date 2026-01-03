@@ -1,0 +1,25 @@
+# Create new Conda environment with Python 3.11
+conda create -n graph2 python=3.11 -y
+conda activate graph2
+
+# Set environment variables for CUDA
+export CUDA_HOME=/opt/software/packages/cuda/12.1
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+# Install PyTorch 2.4.0 with CUDA 12.1 support using conda
+conda install pytorch==2.4.0 torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
+
+# Install PyTorch Geometric with CUDA 12.1 support
+conda install pyg -c pyg -y
+
+# Install DGL with CUDA 12.1 support
+pip3 install  dgl -f https://data.dgl.ai/wheels/torch-2.4/cu121/repo.html
+
+# Install additional common libraries for data science and graph-related tasks
+conda install -c conda-forge scikit-learn pandas numpy tqdm matplotlib networkx tsplib95 optuna -y
+
+# Install LKH via pip (if not available in conda-forge)
+pip3 install lkh
+
+echo "Conda environment 'graph' created with Python 3.11, CUDA 12.1 support, and Optuna."
+echo "Activate with: conda activate graph"

@@ -1,0 +1,19 @@
+{
+  "combo_name": "rel_pp_ss_st_tt_sum",
+  "relations": [
+    "pp",
+    "ss",
+    "st",
+    "tt"
+  ],
+  "agg": "sum",
+  "best_params": {
+    "hidden_dim": 64,
+    "num_heads": 8,
+    "num_gnn_layers": 2,
+    "lr_init": 0.009721925760212241
+  },
+  "best_val_loss": 0.0031810232149500424,
+  "total_trials": 50,
+  "successful_trials": 50
+}

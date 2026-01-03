@@ -1,0 +1,45 @@
+
+# Python cache and bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments / dependency locks
+.venv/
+.env/
+Pipfile.lock
+
+# Data files
+data/raw/
+data/processed/
+*.pkl
+*.pt
+*.npy
+*.npz
+
+# Job logs / runtime files
+jobs
+slurm-*.out
+
+# IDE / editor configs
+.vscode
+.idea/
+
+# Local projects / saved models
+LKH-3.0.9/
+saved_model/
+saved_dataset/
+arch_search_runs/
+runs/
+search/
+
+# Windows WSL bridge scripts
+LKH.bat
+lkh_wsl.py
+
+# WSL virtual environment
+.venv_wsl/
+
+# Test files
+test_*.py
+check_*.py

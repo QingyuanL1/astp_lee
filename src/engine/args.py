@@ -1,0 +1,191 @@
+import argparse
+import yaml
+from typing import Dict, Any
+import inspect
+
+def base_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+
+    # Mode / infra
+    parser.add_argument('--mode', type=str, choices=['train', 'test', 'arch', 'arch_search'], default='train',
+                        help='train, test, or arch (LLM-based architecture search)')
+    parser.add_argument('--framework', type=str, choices=['dgl', 'pyg'], default='dgl',
+                        help='Which graph library to use')
+    parser.add_argument('--tb_dir', type=str, default='./runs', 
+                        help='Tensorboard log directory')
+    parser.add_argument('--config', type=str, default=None, help='YAML config file to load')
+    parser.add_argument('--device', type=str, default='cpu', help='cuda or cpu')
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--n_trials', type=int, default=1)
+    parser.add_argument('--combo_after_arch', action='store_true',
+                        help='Run Optuna combo search after arch_search completes (uses best architecture spec).')
+    parser.add_argument('--combo_n_trials', type=int, default=None,
+                        help='Optuna trials for post-arch combo search (defaults to --n_trials).')
+
+    # Optional: automatically run batch_test after combo search
+    parser.add_argument('--batch_test_after_arch', action='store_true',
+                        help='After arch_search (+ optional combo search), run batch_test over saved search models.')
+    parser.add_argument('--batch_test_sizes', type=int, nargs='+', default=[100, 150, 250],
+                        help='ATSP sizes for batch_test (default: 100 150 250).')
+    parser.add_argument('--batch_test_search_root', type=str, default=None,
+                        help='Root directory that contains saved models (default: ./search/<slurm_id>).')
+    parser.add_argument('--batch_test_time_limit', type=float, default=5.0/30.0,
+                        help='Per-instance time limit passed to batch_test (default: 5/30).')
+    parser.add_argument('--batch_test_perturbation_moves', type=int, default=30,
+                        help='Perturbation moves for GLS in batch_test (default: 30).')
+    parser.add_argument('--batch_test_profile_flops', action=argparse.BooleanOptionalAction, default=True,
+                        help='Enable FLOPs profiling in batch_test (default: enabled).')
+    parser.add_argument('--batch_test_reuse_predictions', action=argparse.BooleanOptionalAction, default=False,
+                        help='Reuse saved regret predictions in batch_test when overriding sizes.')
+    parser.add_argument('--batch_test_override_sizes', type=int, nargs='*', default=None,
+                        help='Force re-evaluation for these sizes (e.g., 100 150).')
+    parser.add_argument('--num_workers', type=int, default=0)
+
+    return parser
+
+
+def train_test_parser() -> argparse.ArgumentParser:
+    """Comprehensive parser used by training and testing flows."""
+    parent = base_parser()
+
+    parser = argparse.ArgumentParser(parents=[parent])
+
+    # Data & dataset
+    parser.add_argument('--data_dir', type=str, required=False, default='./data',
+                        help='Dataset root directory (contains train/val/test folders or files)')
+    parser.add_argument('--data_path', type=str, default=None,
+                        help='Alternative single-path dataset (used by some test scripts)')
+    parser.add_argument('--atsp_size', type=int, default=50)
+    parser.add_argument('--results_dir', type=str, default=None,
+                        help='Optional override for where test outputs are written')
+    parser.add_argument('--relation_types', nargs='+', default=['ss', 'st', 'tt', 'pp'],
+                        help='Relation types used by dataset')
+    parser.add_argument('--relation_subsets', nargs='+', default=None,
+                        help='Optional explicit list of relation subsets to evaluate, e.g. "ss,tt" "pp,ss,st"')
+    parser.add_argument('--undirected', action='store_true', help='Use undirected graphs (PyG only)')
+    parser.add_argument('--hetero', action='store_true', help='Use heterogeneous graphs')
+
+    # Model / architecture
+    parser.add_argument('--model', type=str, default='gcn', help='Model name in your models factory')
+    parser.add_argument('--input_dim', type=int, default=1)
+    parser.add_argument('--hidden_dim', type=int, default=8)
+    parser.add_argument('--output_dim', type=int, default=1)
+    parser.add_argument('--num_gnn_layers', type=int, default=2)
+    parser.add_argument('--num_heads', type=int, default=2)
+    parser.add_argument('--jk', type=str, default=None, choices=[None, 'cat'])
+    parser.add_argument('--skip_connection', action='store_true')
+    parser.add_argument('--agg', type=str, default='concat', choices=['sum', 'concat', 'attn'])
+    parser.add_argument('--architecture_path', type=str, default=None,
+                        help='Path to saved HGNAS architecture JSON')
+    parser.add_argument('--arch_num_layers', type=int, default=None,
+                        help='Override number of HGNAS layers (defaults to num_gnn_layers)')
+    parser.add_argument('--arch_default_op', type=str, default='gat',
+                        help='Fallback op type when no architecture JSON is provided')
+    parser.add_argument('--arch_default_agg', type=str, default='sum',
+                        help='Fallback aggregator when no architecture JSON is provided')
+
+    # Training hyperparams
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--n_epochs', type=int, default=100)
+    parser.add_argument('--lr_init', type=float, default=1e-3)
+    parser.add_argument('--lr_decay', type=float, default=0.99)
+    parser.add_argument('--min_delta', type=float, default=1e-6)
+    parser.add_argument('--patience', type=int, default=10)
+    parser.add_argument('--checkpoint_freq', type=int, default=10)
+
+    # Testing / solver
+    parser.add_argument('--model_path', type=str, default=None,
+                        help='Checkpoint path for testing or resume')
+    parser.add_argument('--time_limit', type=float, default=5./30, help='Search time limit per instance')
+    parser.add_argument('--perturbation_moves', type=int, default=30,
+                        help='Perturbation moves number for search-based tester')
+    parser.add_argument('--perturbation_count', type=int, default=5,
+                        help='Number of perturbations (older arg name mapping)')
+
+    # Large graph testing
+    parser.add_argument('--sub_size', type=int, default=None,
+                        help='Subgraph size for large-graph mode; if None or >= atsp_size, use full graph')
+    parser.add_argument('--cover_algo', type=str, default='greedy',
+                        choices=['greedy', 'bibd'],
+                        help='Algorithm to cover all edges with subgraphs')
+    parser.add_argument('--template_path', type=str, default=None,
+                        help='Path to dataset folder for template subgraph (e.g., ../saved_dataset/ATSP_30x250)')
+    parser.add_argument('--limit_instances', type=int, default=None,
+                        help='Limit number of test instances to run (for large graphs)')
+    parser.add_argument('--lkh_runs', type=int, default=0,
+                        help='If >0, use LKH to refine final tour with given number of runs')
+    parser.add_argument('--lkh_time_limit', type=float, default=0.0,
+                        help='Optional TIME_LIMIT (seconds) for LKH when refining')
+
+    # Logging / extras
+    parser.add_argument('--log_interval', type=int, default=50)
+    parser.add_argument('--n_samples_result_train', type=int, default=30)
+
+    # NAS / LLM settings
+    parser.add_argument('--nas_iterations', type=int, default=3, help='LLM NAS iterations')
+    parser.add_argument('--nas_batch_size', type=int, default=5, help='Architectures sampled per iteration')
+    parser.add_argument('--nas_metric', type=str, default='gap',
+                        choices=['gap', 'cost', 'time', 'val_loss'],
+                        help='Objective used to rank architectures')
+    parser.add_argument('--arch_save_dir', type=str, default='arch_search_runs',
+                        help='Directory to save sampled architectures and evaluations')
+    parser.add_argument('--llm_model', type=str, default='gpt-4o-mini')
+    parser.add_argument('--llm_api_key', type=str, default=None)
+    parser.add_argument('--llm_base_url', type=str, default=None)
+    parser.add_argument('--llm_temperature', type=float, default=0.3)
+    parser.add_argument('--llm_max_tokens', type=int, default=600)
+    parser.add_argument('--llm_timeout', type=int, default=120)
+    parser.add_argument('--llm_offline', action='store_true',
+                        help='If set, skip remote LLM calls and sample architectures randomly (for dry-runs).')
+    parser.add_argument('--llm_seed', type=int, default=0,
+                        help='Offline mode random seed (falls back to --seed when zero)')
+
+    return parser
+
+
+def load_config(config_path: str) -> Dict[str, Any]:
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f) or {}
+
+
+def merge_config_args(args: argparse.Namespace, cfg: Dict[str, Any]) -> argparse.Namespace:
+    """
+    Update args with config values when those are not provided via CLI.
+    CLI overrides YAML.
+    """
+    for k, v in cfg.items():
+        if not hasattr(args, k):
+            # skip unknown keys but still attach them
+            setattr(args, k, v)
+        else:
+            current = getattr(args, k)
+            # If CLI used a default and config provides a different value, use config
+            # BUT only if user did not explicitly pass the arg (we can't easily detect that here),
+            # so we choose to always use config values to simplify reproducible experiments.
+            setattr(args, k, v)
+    return args
+
+
+def smart_instantiate(Cls, args):
+    """Instantiate Cls by matching __init__ parameters with args Namespace."""
+    sig = inspect.signature(Cls.__init__)
+    kwargs = {}
+    for name, param in sig.parameters.items():
+        if name == "self":
+            continue
+        if hasattr(args, name):
+            kwargs[name] = getattr(args, name)
+        elif param.default is inspect.Parameter.empty:
+            raise ValueError(f"Missing required argument: {name}")
+    return Cls(**kwargs)
+
+def parse_args() -> argparse.Namespace:
+    parser = train_test_parser()
+    args = parser.parse_args()
+
+    # Optionally load YAML and override default args
+    if getattr(args, 'config', None):
+        cfg = load_config(args.config)
+        args = merge_config_args(args, cfg)
+
+    return args
